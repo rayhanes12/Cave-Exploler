@@ -19,9 +19,19 @@ public class PlayerMovement : MonoBehaviour
     private float mobileInputX = 0f;
     private Vector2 moveInput;
     private bool isJumping = false;
-    private bool isKnockedBack = false; // ✅ Diperlukan untuk knockback
+    private bool isKnockedBack = false;
+    public CoinManager cm;
 
-    private enum MovementState { idle, walk, jump, fall, run }
+    private enum MovementState
+    {
+        idle = 0,
+        run = 1,
+        jump = 2,
+        attack1 = 3,
+        attack2 = 4,
+        attack3 = 5,
+        death = 6
+    }
 
     [Header("Jump Settings")]
     [SerializeField] private LayerMask jumpableGround;
@@ -33,8 +43,11 @@ public class PlayerMovement : MonoBehaviour
     public TextMeshProUGUI healthText;
 
     [Header("Coin System")]
-    private int currentCoin = 0; // ✅ Tidak perlu deklarasi maxHealth lagi
+    private int currentCoin = 0;
     public TextMeshProUGUI coinText;
+
+    [Header("Chest UI")]
+    public TextMeshProUGUI chestText;
 
     [Header("Knockback Settings")]
     [SerializeField] private float knockBackTime = 0.2f;
@@ -59,10 +72,19 @@ public class PlayerMovement : MonoBehaviour
         playerController.Movement.Move.performed += ctx => moveInput = ctx.ReadValue<Vector2>();
         playerController.Movement.Move.canceled += ctx => moveInput = Vector2.zero;
         playerController.Movement.Jump.performed += ctx => Jump();
+        playerController.Movement.Attack1.performed += HandleAttack1;
+        playerController.Movement.Attack2.performed += HandleAttack2;
+        playerController.Movement.Attack3.performed += HandleAttack3;
     }
 
     private void OnDisable()
     {
+        playerController.Movement.Move.performed -= ctx => moveInput = ctx.ReadValue<Vector2>();
+        playerController.Movement.Move.canceled -= ctx => moveInput = Vector2.zero;
+        playerController.Movement.Jump.performed -= ctx => Jump();
+        playerController.Movement.Attack1.performed -= HandleAttack1;
+        playerController.Movement.Attack2.performed -= HandleAttack2;
+        playerController.Movement.Attack3.performed -= HandleAttack3;
         playerController.Disable();
     }
 
@@ -76,6 +98,8 @@ public class PlayerMovement : MonoBehaviour
         {
             moveInput = playerController.Movement.Move.ReadValue<Vector2>();
         }
+
+        UpdateChestUI();
     }
 
     private void FixedUpdate()
@@ -108,12 +132,6 @@ public class PlayerMovement : MonoBehaviour
         UpdateHealthUI();
     }
 
-    private void UpdateHealthUI()
-    {
-        if (healthText != null)
-            healthText.text = "Health: " + currentHealth;
-    }
-
     private IEnumerator HandleKnockback(Vector2 direction)
     {
         isKnockedBack = true;
@@ -127,6 +145,12 @@ public class PlayerMovement : MonoBehaviour
         isKnockedBack = false;
     }
 
+    private void UpdateHealthUI()
+    {
+        if (healthText != null)
+            healthText.text = "Health: " + currentHealth;
+    }
+
     public void addCoin(int amount)
     {
         currentCoin += amount;
@@ -136,34 +160,48 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
+
+    private void UpdateChestUI()
+    {
+        if (chestText != null && cm != null)
+            chestText.text = "Coin: " + cm.coinCount;
+    }
+
     private void UpdateAnimation()
     {
         MovementState state;
 
+        // Jangan ubah animasi kalau sedang knockback
+        if (isKnockedBack) return;
+
         float horizontal = moveInput.x != 0 ? moveInput.x : mobileInputX;
 
-        if (horizontal > 0f)
+        // Deteksi animasi attack yang sedang berlangsung
+        AnimatorStateInfo currentState = anim.GetCurrentAnimatorStateInfo(0);
+
+        if (currentState.IsName("attackmc1") ||
+            currentState.IsName("attackmc2") ||
+            currentState.IsName("attackmc3") ||
+            currentState.IsName("deathmc"))
         {
-            state = MovementState.walk;
-            sprite.flipX = false;
+            // Biarkan animasi attack/death selesai sendiri (Has Exit Time)
+            return;
         }
-        else if (horizontal < 0f)
+
+        // Pilih animasi gerak
+        if (horizontal != 0f)
         {
-            state = MovementState.walk;
-            sprite.flipX = true;
+            state = MovementState.run;
+            sprite.flipX = horizontal < 0f;
         }
         else
         {
             state = MovementState.idle;
         }
 
-        if (rb.velocity.y > 0.1f)
+        if (rb.velocity.y > 0.1f || rb.velocity.y < -0.1f)
         {
             state = MovementState.jump;
-        }
-        else if (rb.velocity.y < -0.1f)
-        {
-            state = MovementState.fall;
         }
 
         anim.SetInteger("state", (int)state);
@@ -205,5 +243,38 @@ public class PlayerMovement : MonoBehaviour
         {
             Jump();
         }
+    }
+
+    public void PlayAttack1() => anim.SetInteger("state", (int)MovementState.attack1);
+    public void PlayAttack2()
+    {
+        Debug.Log("PlayAttack2: Setting state = 4");
+        anim.SetInteger("state", (int)MovementState.attack2);
+    }
+
+    public void PlayAttack3()
+    {
+        Debug.Log("PlayAttack3: Setting state = 5");
+        anim.SetInteger("state", (int)MovementState.attack3);
+    }
+
+    public void Die() => anim.SetInteger("state", (int)MovementState.death);
+
+    private void HandleAttack1(InputAction.CallbackContext context)
+    {
+        Debug.Log("Attack1 (K) Triggered");
+        PlayAttack1();
+    }
+
+    private void HandleAttack2(InputAction.CallbackContext context)
+    {
+        Debug.Log("Attack2 (L) Triggered");
+        PlayAttack2();
+    }
+
+    private void HandleAttack3(InputAction.CallbackContext context)
+    {
+        Debug.Log("Attack3 (M) Triggered");
+        PlayAttack3();
     }
 }

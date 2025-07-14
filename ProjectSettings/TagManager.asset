@@ -6,6 +6,8 @@ TagManager:
   tags:
   - Terain
   - Terrain
+  - chest
+  - Coin
   layers:
   - Default
   - TransparentFX
